@@ -18,6 +18,10 @@ def get_target_price(ticker, k):
     """변동성 돌파 전략으로 매수 목표가 조회"""
     try:
         df = pyupbit.get_ohlcv(ticker, interval="day", count=2)
+        if df is None :
+            print("## get_target_price : df is None")
+            return None
+    
         target_price = df.iloc[0]['close'] + (df.iloc[0]['high'] - df.iloc[0]['low']) * k
     
         return target_price
@@ -60,6 +64,9 @@ def get_current_price(ticker):
 def get_risk_modifier(ticker, target_volatility):
     """변동성 자금관리"""
     df = pyupbit.get_ohlcv(ticker, interval="day", count=2)
+    if df is None :
+        print("## get_risk_modifier : df is None")
+        return 0
     range = df.iloc[0]['high'] - df.iloc[0]['low']
     range_percnetage = range / df.iloc[0]['close']
     return (target_volatility / range_percnetage)
@@ -68,7 +75,9 @@ def get_risk_modifier(ticker, target_volatility):
 def check_is_over_ma(ticker, current_price):
     """3. 5, 10, 20일 이동 평균선 조회"""
     df = pyupbit.get_ohlcv(ticker, interval="day", count=20)
-
+    if df is None :
+        print("## check_is_over_ma : df is None")
+        return False
     ma = df['close'].rolling(window=3).mean().iloc[-1]
     if (ma < current_price):
         return True
@@ -86,6 +95,9 @@ def check_is_over_ma(ticker, current_price):
 def check_is_over_ma5(ticker, current_price):
     """5일 이동 평균선 조회"""
     df = pyupbit.get_ohlcv(ticker, interval="day", count=5)
+    if df is None :
+        print("## check_is_over_ma5 : df is None")
+        return False
     ma5 = df['close'].rolling(5).mean().iloc[-1]
     if (ma5 < current_price):
         return True
@@ -130,6 +142,7 @@ end_time = start_time
 # ticker
 today_buy_coins = []
 is_today_sell = False
+krw = 0
 
 time.sleep(1)
 while True:
@@ -154,14 +167,18 @@ while True:
 
             today_buy_coins.clear()
             is_today_sell = False
+
+            
+            krw = get_balance("KRW")
+            krw = 50000
             print("==========================================================")
             print("change date = {0} ~ {1}".format(start_time, end_time))
+            print("current balance = {0}".format(krw))
         
 
         # 매매
         if (start_time < now < end_time - datetime.timedelta(seconds=60 * 1)):
             if len(today_buy_coins) < TODAY_BUY_LIMIT: 
-                krw = get_balance("KRW")
 
                 if krw > ORDER_MIN_MONEY:
                     buy_coins = []
@@ -189,16 +206,20 @@ while True:
                             break
             
                     for buy_ticker in buy_coins:
-                        today_buy_coins.append(buy_ticker)
+                      
                         order_money = krw * (get_risk_modifier(buy_ticker, risk_ratio) / TODAY_BUY_LIMIT)
                         order_money = math.floor(order_money * 0.9995)
-
+                        print((get_risk_modifier(buy_ticker, risk_ratio) / TODAY_BUY_LIMIT))
                         if order_money < ORDER_MIN_MONEY:
                             order_money = ORDER_MIN_MONEY
 
                         result = upbit.buy_market_order(buy_ticker, order_money)
-                        print("++매수요청! 티커 : {0:>10}, 거래액 : ₩{1:>15,}, timestamp : {2}\n{3}".format(buy_ticker, order_money, now, result))
-                    
+                        if (result is None) :
+                            print("## Failed buy_market_order : {0}".format(buy_ticker))
+                        else:
+                            today_buy_coins.append(buy_ticker)
+                            print("++매수요청! 티커 : {0:>10}, 거래액 : ₩{1:>15,}, timestamp : {2}\n{3}".format(buy_ticker, order_money, now, result))
+                        time.sleep(0.2)
                     print(str(now) + " : buy process done. ")
 
             time.sleep(20)
